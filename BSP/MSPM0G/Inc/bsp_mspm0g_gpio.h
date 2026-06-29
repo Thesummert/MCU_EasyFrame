@@ -8,9 +8,8 @@ extern "C" {
 
 #include "ti_msp_dl_config.h"
 
-    // GPIO抽象封装
+// GPIO抽象封装
 typedef struct EasyFrame_GPIO_Typedef_t {
-
     _Bool (*Toggle)(struct EasyFrame_GPIO_Typedef_t *self);
     _Bool (*SetHigh)(struct EasyFrame_GPIO_Typedef_t *self);
     _Bool (*SetLow)(struct EasyFrame_GPIO_Typedef_t *self);
@@ -19,10 +18,12 @@ typedef struct EasyFrame_GPIO_Typedef_t {
     struct {
         GPIO_Regs *gpio;
         uint32_t pin;
-    }mspm0g ;
+        IOMUX_PINCM iomux;
+    } mspm0g;
 } EasyFrame_GPIO_Typedef_t;
 
 _Bool EasyFrame_GPIO_Init(EasyFrame_GPIO_Typedef_t *self, GPIO_Regs *gpio, uint32_t pin);
+_Bool EasyFrame_GPIO_InitIOMux(EasyFrame_GPIO_Typedef_t *self, IOMUX_PINCM iomux);
 _Bool EasyFrame_GPIO_Toggle(EasyFrame_GPIO_Typedef_t *self);
 _Bool EasyFrame_GPIO_SetHigh(EasyFrame_GPIO_Typedef_t *self);
 _Bool EasyFrame_GPIO_SetLow(EasyFrame_GPIO_Typedef_t *self);

@@ -28,6 +28,16 @@ _Bool EasyFrame_GPIO_Init(EasyFrame_GPIO_Typedef_t *self, GPIO_Regs *gpio, uint3
     return true;
 }
 
+_Bool EasyFrame_GPIO_InitIOMux(EasyFrame_GPIO_Typedef_t *self, IOMUX_PINCM iomux)
+{
+
+    if (self == NULL ) {
+        RTT_Print(0, "Null pointer error happened in GPIO INIT \r\n");
+        return false;
+    }
+    self->mspm0g.iomux = iomux;
+    return true;
+}
 /**
  * @brief 翻转GPIO引脚电平
  * @param self EasyFrame_GPIO_Typedef_t结构体指针

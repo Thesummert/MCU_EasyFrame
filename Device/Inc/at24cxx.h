@@ -31,6 +31,10 @@ typedef struct EF_Device_AT24CXX_t {
 
     _Bool (*ReadByte)(struct EF_Device_AT24CXX_t *self, uint32_t addr, uint8_t *data);
     _Bool (*WriteByte)(struct EF_Device_AT24CXX_t *self, uint32_t addr, uint8_t data);
+    _Bool (*WriteData)(struct EF_Device_AT24CXX_t *self, uint32_t start_addr, uint8_t *data,
+                       uint32_t len);
+    _Bool (*ReadData)(struct EF_Device_AT24CXX_t *self, uint32_t start_addr, uint8_t *data,
+                      uint32_t len);
 } EF_Device_AT24CXX_t;
 
 _Bool EF_Device_AT24CXX_Init(EF_Device_AT24CXX_t *self, EF_Device_AT24Type_e type, uint8_t addr,
