@@ -1,3 +1,12 @@
+/**
+ * @file bsp_mspm0g_i2c.c
+ * @brief MSPM0G I2C 总线驱动实现
+ *
+ * 基于 TI MSPM0G 系列 MCU 的 I2C 控制器驱动，提供 I2C 主模式下的
+ * 收发、高级传输、先写后读、总线恢复等功能。
+ * 内部使用 FIFO 分包传输机制，并包含 TI 硬件 BUG 的延时补偿处理。
+ */
+
 #include "bsp_mspm0g_i2c.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,7 +17,9 @@
 #include "ti/devices/msp/peripherals/hw_i2c.h"
 #include "ti/driverlib/dl_i2c.h"
 
+/** 微秒级延时宏 */
 #define Delay_us(X) EasyFrameSysTime_Delay_us(X)
+/** 获取当前时间戳（微秒）宏 */
 #define GetTime()   EasyFrameSysTime_GetTimeline_us()
 
 static _Bool EasyFrame_I2C_Transmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *data,
@@ -19,9 +30,18 @@ static _Bool TransmitAdvanced(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr,
                               uint16_t size, uint32_t timeout, _Bool start, _Bool ack, _Bool stop);
 static _Bool ReadAfterTransmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *cmd,
                                uint16_t cmd_len, uint8_t *data, uint16_t data_len, uint32_t timeout);
+static _Bool Reset(EasyFrame_I2C_Typedef_t *self, _Bool need_change);
 
-static _Bool Reset(EasyFrame_I2C_Typedef_t *self, _Bool need_change); 
-
+/**
+ * @brief 初始化 I2C 控制器
+ * @param self    I2C 对象指针
+ * @param i2c     I2C 外设寄存器基址
+ * @param bus_clk I2C 总线时钟频率（Hz）
+ * @return 成功返回 true，失败返回 false
+ *
+ * 初始化 I2C 对象，计算 FIFO 启动延时所需的时钟周期数，
+ * 绑定内部函数指针。
+ */
 _Bool EasyFrame_I2C_Init(EasyFrame_I2C_Typedef_t *self, I2C_Regs *i2c, uint32_t bus_clk) {
     if (self == NULL || i2c == NULL) {
         RTT_Print(0, "Null pointer error happened in i2c init \r\n");
@@ -49,6 +69,15 @@ _Bool EasyFrame_I2C_Init(EasyFrame_I2C_Typedef_t *self, I2C_Regs *i2c, uint32_t 
     return true;
 }
 
+/**
+ * @brief 初始化 I2C 引脚（SDA/SCL）
+ * @param self I2C 对象指针
+ * @param sda  SDA 引脚 GPIO 配置
+ * @param scl  SCL 引脚 GPIO 配置
+ * @return 成功返回 true，失败返回 false
+ *
+ * 保存 SDA 和 SCL 的 GPIO 信息，用于后续总线恢复时的 GPIO 位冲操作。
+ */
 _Bool EasyFrame_I2C_InitGPIO(EasyFrame_I2C_Typedef_t *self, EasyFrame_GPIO_Typedef_t sda,
                              EasyFrame_GPIO_Typedef_t scl) {
     if (self == NULL) {
@@ -60,6 +89,18 @@ _Bool EasyFrame_I2C_InitGPIO(EasyFrame_I2C_Typedef_t *self, EasyFrame_GPIO_Typed
     return true;
 }
 
+/**
+ * @brief I2C 数据发送
+ * @param self       I2C 对象指针
+ * @param slave_addr 从机设备地址（7位）
+ * @param data       待发送数据缓冲区
+ * @param size       发送数据字节数
+ * @param timeout    超时时间（微秒）
+ * @return 成功返回 true，失败返回 false
+ *
+ * 将数据按 FIFO 最大长度分包发送。单包发送带起始/停止条件，
+ * 多包时首包发起始、末包发停止、中间包不产生起停条件。
+ */
 _Bool EasyFrame_I2C_Transmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *data,
                              uint16_t size, uint32_t timeout) {
     if (self->is_inited == false) {
@@ -132,6 +173,17 @@ _Bool EasyFrame_I2C_Transmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, 
     return true;
 }
 
+/**
+ * @brief I2C 数据接收
+ * @param self       I2C 对象指针
+ * @param slave_addr 从机设备地址（7位）
+ * @param data       接收数据缓冲区
+ * @param size       预期接收的字节数
+ * @param timeout    超时时间（微秒）
+ * @return 成功返回 true，失败返回 false
+ *
+ * 启动 I2C 接收传输后，从 RX FIFO 逐字节读取数据。
+ */
 _Bool EasyFrame_I2C_Receive(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *data,
                             uint16_t size, uint32_t timeout) {
     if (self->is_inited == false) {
@@ -161,6 +213,20 @@ _Bool EasyFrame_I2C_Receive(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, u
     return true;
 }
 
+/**
+ * @brief I2C 高级发送（可自定义起始、应答、停止条件）
+ * @param self       I2C 对象指针
+ * @param slave_addr 从机设备地址
+ * @param data       待发送数据缓冲区
+ * @param size       数据长度
+ * @param timeout    超时时间（微秒）
+ * @param need_start 是否产生起始条件
+ * @param ack        是否使能应答
+ * @param stop       是否产生停止条件
+ * @return 成功返回 true，失败返回 false
+ *
+ * 相比普通发送，允许调用方灵活控制起始/应答/停止信号的产生时机。
+ */
 static _Bool TransmitAdvanced(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *data,
                               uint16_t size, uint32_t timeout, _Bool need_start, _Bool ack, _Bool stop) {
     if (self == NULL) {
@@ -227,6 +293,21 @@ static _Bool TransmitAdvanced(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr,
     return true;
 }
 
+/**
+ * @brief 先写命令后读数据（复合传输）
+ * @param self       I2C 对象指针
+ * @param slave_addr 从机设备地址
+ * @param cmd        待发送的命令数据
+ * @param cmd_len    命令长度（不得超过 FIFO 最大深度）
+ * @param data       接收数据缓冲区
+ * @param data_len   预期接收数据长度
+ * @param timeout    超时时间（微秒）
+ * @return 成功返回 true，失败返回 false
+ *
+ * 利用 I2C 的 RD_ON_TXEMPTY 特性：先发送 TX FIFO 中的命令字节，
+ * 待 TX FIFO 空后自动发起重复起始条件切换为接收模式读取数据。
+ * 适用于 AT24Cxx 等需要先发地址再读数据的存储器类器件。
+ */
 static _Bool ReadAfterTransmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr, uint8_t *cmd,
                                uint16_t cmd_len, uint8_t *data, uint16_t data_len, uint32_t timeout) {
     if (self == NULL) {
@@ -307,6 +388,16 @@ static _Bool ReadAfterTransmit(EasyFrame_I2C_Typedef_t *self, uint8_t slave_addr
     return true;
 }
 
+/**
+ * @brief I2C 总线恢复（软件位冲方式）
+ * @param self        I2C 对象指针
+ * @param need_change 是否执行 GPIO 位冲恢复流程
+ * @return 成功返回 true，失败返回 false
+ *
+ * 当从机拉低 SCL/SDA 导致总线锁死时，将对应引脚切换为 GPIO 输出，
+ * 通过发送 9 个 SCL 脉冲以及 START/STOP 信号来释放总线，
+ * 最后恢复 IOMUX 配置并重新使能 I2C 控制器。
+ */
 static _Bool Reset(EasyFrame_I2C_Typedef_t *self, _Bool need_change) {
     if (self == NULL) {
         RTT_Print(0, "Null pointer error in i2c \r\n");
