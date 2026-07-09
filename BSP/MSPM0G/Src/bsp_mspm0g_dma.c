@@ -94,10 +94,10 @@ static _Bool EnableFullIRQ(EF_DMA_Typedef *self) {
   }
   uint32_t it_mask;
   switch (self->mspm0g.channel) {
-  case UART0_RX_DMA_CHANNEL_CHAN_ID:
+  case DMA_CH1_CHAN_ID:
     it_mask = DMA_CPU_INT_IMASK_DMACH1_SET;
     break;
-  case UART0_TX_DMA_CHANNEL_CHAN_ID:
+  case DMA_CH0_CHAN_ID:
     it_mask = DMA_CPU_INT_IMASK_DMACH0_SET;
     break;
   default:
@@ -114,15 +114,14 @@ static _Bool EnableFullIRQ(EF_DMA_Typedef *self) {
  *
  * @param self 指向DMA实例结构体的指针。
  */
-static void ClearIRQ(EF_DMA_Typedef *self)
-{
+static void ClearIRQ(EF_DMA_Typedef *self) {
   uint32_t it_mask;
   switch (self->mspm0g.channel) {
-  case UART0_TX_DMA_CHANNEL_CHAN_ID:
-    it_mask = DMA_CPU_INT_IMASK_DMACH0_SET;
-    break;
-  case UART0_RX_DMA_CHANNEL_CHAN_ID:
+  case DMA_CH1_CHAN_ID:
     it_mask = DMA_CPU_INT_IMASK_DMACH1_SET;
+    break;
+  case DMA_CH0_CHAN_ID:
+    it_mask = DMA_CPU_INT_IMASK_DMACH0_SET;
     break;
   default:
     break;

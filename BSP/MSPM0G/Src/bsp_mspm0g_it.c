@@ -3,10 +3,13 @@
 #include "mcu_config.h"
 #include "ti/devices/msp/m0p/mspm0g350x.h"
 #include "ti/driverlib/dl_dma.h"
+#include "ti/driverlib/dl_mcan.h"
 #include "ti/driverlib/dl_uart.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#include "bsp_can.h"
 
 static void CallbackRunner(EF_IT_Group_Typedef *self, EF_IT_e type,
                            void *param);
@@ -14,6 +17,7 @@ static _Bool IT_Group_Init(EF_IT_Group_Typedef *self);
 
 static EF_IT_Group_Typedef uart_it_group; // 串口中断组合
 static EF_IT_Group_Typedef dma_it_group;  // DMA 中断组合
+static EF_IT_Group_Typedef can_it_group;  // CAN 中断组合
 
 /**
  * @brief 初始化中断对象。
@@ -44,6 +48,7 @@ _Bool EF_BSP_IT_Init(EF_IT_Typedef *self, EF_IT_e type,
 void EF_BSP_IT_Group_Init() {
   IT_Group_Init(&uart_it_group);
   IT_Group_Init(&dma_it_group);
+  IT_Group_Init(&can_it_group);
 }
 
 /**
@@ -112,6 +117,8 @@ EF_IT_Group_Typedef *EF_BSP_IT_Group_GetUartPtr() { return &uart_it_group; }
 
 EF_IT_Group_Typedef *EF_BSP_IT_Group_GetDMAPtr() { return &dma_it_group; }
 
+EF_IT_Group_Typedef *EF_BSP_IT_Group_GetCANPtr() { return &can_it_group; }
+
 /*
  * ============================
  * 此处为具体的IQR handler实现
@@ -122,7 +129,7 @@ EF_IT_Group_Typedef *EF_BSP_IT_Group_GetDMAPtr() { return &dma_it_group; }
 void UART_0_INST_IRQHandler(void) {
   switch (DL_UART_getPendingInterrupt(UART0)) {
   case DL_UART_IIDX_RX: // 串口RX回调
-      CallbackRunner(&uart_it_group,UART0_RX_CALLBACK,NULL);
+    CallbackRunner(&uart_it_group, UART0_RX_CALLBACK, NULL);
     break;
   case DL_UART_IIDX_TX: // 串口TX回调
     CallbackRunner(&uart_it_group, UART0_TX_CALLBACK, NULL);
@@ -140,8 +147,31 @@ void DMA_IRQHandler(void) {
   case DL_DMA_EVENT_IIDX_DMACH1:
     CallbackRunner(&dma_it_group, UART0_DMA_RX_CALLBACK, NULL);
     break;
-    case DL_DMA_EVENT_IIDX_DMACH0:
+  case DL_DMA_EVENT_IIDX_DMACH0:
     CallbackRunner(&dma_it_group, UART0_DMA_TX_CALLBACK, NULL);
+    break;
+  default:
+    break;
+  }
+}
+
+void CANFD0_IRQHandler(void) {
+  EF_CAN_IT_CallbackPass_t pass;
+  uint32_t can_it;
+  pass.can = MCAN0_INST;
+  switch (DL_MCAN_getPendingInterrupt(MCAN0_INST)) {
+  case DL_MCAN_IIDX_LINE0:
+  case DL_MCAN_IIDX_LINE1:
+    can_it = DL_MCAN_getIntrStatus(MCAN0_INST);
+    if ((can_it & DL_MCAN_INTERRUPT_RF0N)) {
+      pass.canid = 0;
+      CallbackRunner(&can_it_group, MCAN0_RXFIFO_0_Callback, &pass);
+    }
+    if ((can_it & DL_MCAN_INTERRUPT_RF1N)) {
+      pass.canid = 1;
+      CallbackRunner(&can_it_group, MCAN0_RXFIFO_1_Callback, &pass);
+    }
+
     break;
   default:
     break;

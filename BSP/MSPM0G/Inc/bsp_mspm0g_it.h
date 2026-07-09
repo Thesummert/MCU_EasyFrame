@@ -20,6 +20,8 @@ typedef enum {
   UART0_IDLE_RX_CALLBACK,
   UART_0_DMA_TX_Callback,
   UART_0_DMA_RX_Callback,
+  MCAN0_RXFIFO_0_Callback,
+  MCAN0_RXFIFO_1_Callback,
 
 } EF_IT_e;
 
@@ -44,6 +46,7 @@ _Bool EF_BSP_IT_Group_Add(EF_IT_Group_Typedef *self, EF_IT_Typedef *it);
 
 EF_IT_Group_Typedef *EF_BSP_IT_Group_GetUartPtr();
 EF_IT_Group_Typedef *EF_BSP_IT_Group_GetDMAPtr();
+EF_IT_Group_Typedef *EF_BSP_IT_Group_GetCANPtr();
 
 #ifdef __cplusplus
 }
